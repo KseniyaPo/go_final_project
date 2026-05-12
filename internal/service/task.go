@@ -10,20 +10,18 @@ import (
 )
 
 var (
-	ErrTaskIDEmpty     = errors.New("идентификатор задачи не указан")
-	ErrTaskIDInvalid   = errors.New("идентификатор задачи содержит не правильный формат")
-	ErrTaskTitleEmpty  = errors.New("не указан заголовок задачи")
-	ErrTaskDateInvalid = errors.New("дата представлена в формате, отличном от " + api.DateFormat)
+	ErrTaskIDEmpty     = errors.New("task id empty")
+	ErrTaskIDInvalid   = errors.New("task id invalid")
+	ErrTaskTitleEmpty  = errors.New("task title empty")
+	ErrTaskDateInvalid = errors.New("task date invalid")
 )
 
 type ITaskStore interface {
 	List(int) ([]models.Task, error)
 	Get(string) (*models.Task, error)
 	Add(*models.Task) (string, error)
-	SetTitle(*models.Task) error
-	SetComment(*models.Task) error
-	SetDate(*models.Task) error
-	SetRepeat(*models.Task) error
+	Update(*models.Task) error
+	UpdateDate(*models.Task) error
 	Delete(string) error
 }
 
@@ -84,24 +82,16 @@ func (s *TaskService) List(limit int) ([]models.Task, error) {
 }
 
 func (s *TaskService) Get(id string) (*models.Task, error) {
-	if id == "" {
-		s.logs.Println(ErrTaskIDEmpty)
-
-		return nil, ErrTaskIDEmpty
-	}
-
-	_, err := strconv.Atoi(id)
+	err := s.validateId(id)
 	if err != nil {
-		s.logs.Println(err)
-
-		return nil, ErrTaskIDInvalid
+		return nil, err
 	}
 
 	return s.store.Get(id)
 }
 
 func (s *TaskService) Edit(task *models.Task) error {
-	_, err := s.Get(task.ID)
+	err := s.validateId(task.ID)
 	if err != nil {
 		return err
 	}
@@ -119,10 +109,8 @@ func (s *TaskService) Edit(task *models.Task) error {
 		return ErrTaskDateInvalid
 	}
 
-	now := time.Now()
-
 	if task.Repeat != "" {
-		_, err := api.NextDate(now, task.Date, task.Repeat)
+		_, err := api.NextDate(time.Now(), task.Date, task.Repeat)
 
 		if err != nil {
 			s.logs.Println(err)
@@ -131,36 +119,16 @@ func (s *TaskService) Edit(task *models.Task) error {
 		}
 	}
 
-	err = s.store.SetTitle(task)
-	if err != nil {
-		return err
-	}
-
-	err = s.store.SetComment(task)
-	if err != nil {
-		return err
-	}
-
-	err = s.store.SetDate(task)
-	if err != nil {
-		return err
-	}
-
-	err = s.store.SetRepeat(task)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return s.store.Update(task)
 }
 
 func (s *TaskService) Delete(id string) error {
-	task, err := s.Get(id)
+	err := s.validateId(id)
 	if err != nil {
 		return err
 	}
 
-	return s.store.Delete(task.ID)
+	return s.store.Delete(id)
 }
 
 func (s *TaskService) Done(id string) error {
@@ -173,19 +141,43 @@ func (s *TaskService) Done(id string) error {
 		return s.Delete(task.ID)
 	}
 
-	taskDate, err := api.ParseDate(task.Date)
+	task.Date, err = s.NextDate(task.Date, task.Date, task.Repeat)
 	if err != nil {
-		s.logs.Println(err)
-
 		return err
 	}
 
-	task.Date, err = api.NextDate(taskDate, task.Date, task.Repeat)
+	return s.store.UpdateDate(task)
+}
+
+func (s *TaskService) NextDate(nowstr, date, repeat string) (string, error) {
+	now, err := api.ParseDate(nowstr)
+	if err != nil {
+		s.logs.Println(err)
+		return "", err
+	}
+
+	date, err = api.NextDate(now, date, repeat)
+	if err != nil {
+		s.logs.Println(err)
+		return "", err
+	}
+
+	return date, nil
+}
+
+func (s *TaskService) validateId(id string) error {
+	if id == "" {
+		s.logs.Println(ErrTaskIDEmpty)
+
+		return ErrTaskIDEmpty
+	}
+
+	_, err := strconv.Atoi(id)
 	if err != nil {
 		s.logs.Println(err)
 
-		return err
+		return ErrTaskIDInvalid
 	}
 
-	return s.store.SetDate(task)
+	return nil
 }

@@ -3,14 +3,18 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"io"
+	"log"
 	"net/http"
 
 	"go_final_project/internal/models"
 	"go_final_project/pkg/api"
 )
 
+const TaskCount = 50
+
 var (
-	ErrTaskParsed = errors.New("ошибка десериализации JSON")
+	ErrTaskParsed = errors.New("fail decode json")
 )
 
 type ITaskService interface {
@@ -20,15 +24,18 @@ type ITaskService interface {
 	Edit(*models.Task) error
 	Done(string) error
 	Delete(string) error
+	NextDate(string, string, string) (string, error)
 }
 
 type TaskHandler struct {
 	service ITaskService
+	logs    *log.Logger
 }
 
-func NewTaskHandler(service ITaskService) *TaskHandler {
+func NewTaskHandler(service ITaskService, logs *log.Logger) *TaskHandler {
 	return &TaskHandler{
 		service: service,
+		logs:    logs,
 	}
 }
 
@@ -56,7 +63,7 @@ func (h *TaskHandler) Add() http.Handler {
 
 func (h *TaskHandler) List() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tasks, err := h.service.List(50)
+		tasks, err := h.service.List(TaskCount)
 		if err != nil {
 			api.Failed(w, err, http.StatusBadRequest)
 			return
@@ -121,5 +128,20 @@ func (h *TaskHandler) Delete() http.Handler {
 		}
 
 		api.Succefull(w, struct{}{})
+	})
+}
+
+func (h *TaskHandler) NextDate() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		date, err := h.service.NextDate(r.FormValue("now"), r.FormValue("date"), r.FormValue("repeat"))
+		if err != nil {
+			api.Failed(w, err, http.StatusBadRequest)
+			return
+		}
+
+		_, err = io.WriteString(w, date)
+		if err != nil {
+			h.logs.Println(err)
+		}
 	})
 }

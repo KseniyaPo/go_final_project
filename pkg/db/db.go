@@ -30,8 +30,19 @@ func Init(dbFile string) (*sql.DB, error) {
 	}
 
 	if install {
-		conn.Exec(createShedulerTableSql)
-		conn.Exec(createShedulerDateIndexSql)
+		_, err = conn.Exec(createShedulerTableSql)
+		if err != nil {
+			defer conn.Close()
+
+			return nil, err
+		}
+
+		_, err = conn.Exec(createShedulerDateIndexSql)
+		if err != nil {
+			defer conn.Close()
+
+			return nil, err
+		}
 	}
 
 	return conn, nil

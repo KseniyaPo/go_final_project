@@ -11,8 +11,10 @@ func main() {
 
 	conn, err := db.Init("./scheduler.db")
 	if err != nil {
-		log.Fatal(err)
+		logs.Fatal(err)
 	}
+
+	defer conn.Close()
 
 	server.Init("7540", "./web", conn, logs)
 }

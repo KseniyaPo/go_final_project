@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	ErrTaskNotFound = errors.New("задача не найдена")
+	ErrTaskNotFound = errors.New("task not found")
 )
 
 type TaskStore struct {
@@ -58,6 +58,19 @@ func (s *TaskStore) List(limit int) ([]models.Task, error) {
 		}
 
 		tasks = append(tasks, task)
+	}
+
+	err = rows.Err()
+	if err == sql.ErrNoRows {
+		s.logs.Println(err)
+
+		return nil, nil
+	}
+
+	if err != nil {
+		s.logs.Println(err)
+
+		return nil, err
 	}
 
 	return tasks, nil
@@ -116,28 +129,28 @@ func (s *TaskStore) Add(task *models.Task) (string, error) {
 	return fmt.Sprintf("%d", id), nil
 }
 
-func (s *TaskStore) SetTitle(task *models.Task) error {
-	query := "UPDATE scheduler SET title = :title WHERE id = :id"
+func (s *TaskStore) Update(task *models.Task) error {
+	query := "UPDATE scheduler SET title = :title, comment = :comment, date = :date, repeat = :repeat WHERE id = :id"
 
-	_, err := s.conn.Exec(query,
+	result, err := s.conn.Exec(query,
 		sql.Named("title", task.Title),
-		sql.Named("id", task.ID))
-
-	if err != nil {
-		s.logs.Println(err)
-
-		return err
-	}
-
-	return nil
-}
-
-func (s *TaskStore) SetComment(task *models.Task) error {
-	query := "UPDATE scheduler SET comment = :comment WHERE id = :id"
-
-	_, err := s.conn.Exec(query,
 		sql.Named("comment", task.Comment),
+		sql.Named("date", task.Date),
+		sql.Named("repeat", task.Repeat),
 		sql.Named("id", task.ID))
+
+	if err != nil {
+		s.logs.Println(err)
+
+		return err
+	}
+
+	count, err := result.RowsAffected()
+	if count == 0 {
+		s.logs.Println(ErrTaskNotFound)
+
+		return ErrTaskNotFound
+	}
 
 	if err != nil {
 		s.logs.Println(err)
@@ -148,28 +161,18 @@ func (s *TaskStore) SetComment(task *models.Task) error {
 	return nil
 }
 
-func (s *TaskStore) SetDate(task *models.Task) error {
+func (s *TaskStore) UpdateDate(task *models.Task) error {
 	query := "UPDATE scheduler SET date = :date WHERE id = :id"
 
 	_, err := s.conn.Exec(query,
 		sql.Named("date", task.Date),
 		sql.Named("id", task.ID))
 
-	if err != nil {
+	if err == sql.ErrNoRows {
 		s.logs.Println(err)
 
-		return err
+		return ErrTaskNotFound
 	}
-
-	return nil
-}
-
-func (s *TaskStore) SetRepeat(task *models.Task) error {
-	query := "UPDATE scheduler SET repeat = :repeat WHERE id = :id"
-
-	_, err := s.conn.Exec(query,
-		sql.Named("repeat", task.Repeat),
-		sql.Named("id", task.ID))
 
 	if err != nil {
 		s.logs.Println(err)
